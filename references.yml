@@ -1,0 +1,80 @@
+Kubenetes:
+$ kubectl cp file.tar.gz -n team-wt-pilot-dt buildkite-anaconda-agent-deployment-8498c9b854-x4jx4:/usr/src/app
+kubectl get pods -n team-adap-ae-dt
+kubectl get pods -n team-adap-ae-test
+kubectl get pods -n vault
+kubectl get pods,deploy,svc,sts -n vault
+kubectl describe buildkite-kaniko-agent-deployment-6486bcb86-tfnbm -n team-wt-pilot-dt
+kubectl exec -it buildkite-anaconda-agent-deployment-bcc78968-7kk82 -n team-adap-ae-test bash
+#Copy the code manually to k8s
+tar -czvf sample_python_app.tar.gz sample_python_app
+kubectl cp sample_python_app.tar.gz -n team-wt-pilot-dt buildkite-anaconda-agent-deployment-bcc78968-7kk82:/usr/src/app
+kubectl exec -it buildkite-anaconda-agent-deployment-bcc78968-7kk82 -n team-wt-pilot-dt bash
+tar -xzf sample_python_app.tar.gz
+============================================================================================================================================
+Helm:
+$ helm list --namespace team-wt-pilot-dt
+$ helm install  anaconda-team-wt-pilot-dt ../buildkite-anaconda --namespace team-wt-pilot-dt
+$ helm upgrade --install  anaconda-team-wt-pilot-dt ../buildkite-anaconda --namespace team-wt-pilot-dt
+$ kubectl apply -k templates/helm-agent-secrets.yml --namespace team-wt-pilot-dt
+============================================================================================================================================
+Vault:
+kubectl delete pvc --all -n vault
+kubectl delete pod/vault-example-0 statefulset.apps/vault-example service/adap-vault-ui service/vault-example -n vault
+kubectl -b vault apply -f server
+vault operator seal
+vault operator unseal
+kubectl -n vault port-forward vault-example-0 8200
+Unseal Key 1: DLFeUjnaR2qobQcXphXuv+i28gdOsllmcrrf34/VOtLE
+Unseal Key 2: dvT1ecQxwsezdzE+lAoblkB0hxw1TSKlx6C8IXK0OXON
+Unseal Key 3: y2pKL44TSMrs3P/Bu5Om65wLnvES4J+NXVSUPSMlr5LD
+Unseal Key 4: VF8A/aTMQ5CZ/KOkCDAIv/CRGCG7D03VDDQ4+IG7Jutk
+Unseal Key 5: 6cG/q+7uyZ3GV21bJ6m1wizuAcycovD9lsAQ5NAqsAoq
+
+Initial Root Token: s.tRSwLMqkcSgF7bRkts1oImVr
+
+Allow Vault to k8s api (autentication / injecton):
+$ kubectl exec -it vault-example-0 -n vault sh
+/ $ vault write auth/kubernetes/config \
+> token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+> kubernetes_host=https://${KUBERNETES_PORT_443_TCP_ADDR}:443 \
+> kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+Success! Data written to: auth/kubernetes/config
+
+Map service account to a POD, to a policy:
+/ $ vault write auth/kubernetes/role/basic-secret-role \
+> bound_service_account_names=basic-secret \
+> bound_service_account_namespaces=vault \
+> policies=basic-secret-policy \
+> ttl=1h
+Success! Data written to: auth/kubernetes/role/basic-secret-role
+
+Policy to map service account to some secrets:
+cat <<EOF > /home/vault/app-policy.hcl
+path "secret/basic-secret/*" {
+  capabilities = ["read"] 
+}
+EOF
+
+Deploy service account for basic-secret:
+kubectl -n vault apply -f example-apps/basic-secret/deployment.yaml
+============================================================================================================================================
+NoVNC:
+BitBucket key: f32AkeWmBPVenmdWMs4H
+============================================================================================================================================
+Docker:
+Example of keeping container alive:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ubuntu
+spec:
+  containers:
+  - name: ubuntu
+    image: ubuntu:latest
+    # Just spin & wait forever
+    command: [ "/bin/bash", "-c", "--" ]
+    args: [ "while true; do sleep 30; done;" ]
+
+
+    1064

@@ -1,0 +1,66 @@
+# Vault POC notes
+
+Introduction
+We do not have a mechanism for storing secrets, credentials and passwords. It is done on the fly via environment variables at build time, possibly even stored on BitBucket, we're unsure since we don't scan repos for vulnerabilities.
+
+To protect the data of ASML, we should develop an implementation of a key store or a vault.
+
+ASML currently uses CyberArk, but we also POC'd Hashicorp Vault.
+
+CyberArk:
+The DAP is the CyberArk solution to retrieve secrets from their CyberArk Vaults and use them in any environment, whether it’s running on-premise Kubernetes, or in the Cloud. It is the enterprise version of the open-source CyberArk Conjur.
+
+The CyberArk Secrets Provider for Kubernetes enables you to use secrets stored and managed in the CyberArk Vault using DAP and consume them as Kubernetes secrets in your application containers. To do so, the CyberArk Secrets Provider for Kubernetes image runs as an init container and populates the Kubernetes secrets required by the pod, from DAP.
+
+Unfortunately, the PAM (Privileged Access Management) team does not allow a Proof of Concept with this product just yet, because they’re not looking into the DAP right now, it’s on their roadmap for the upcoming months.
+
+Vault:
+Vault secures, stores, and tightly controls access to tokens, passwords, certificates, API keys, and other secrets in modern computing.
+
+Vault Features:
+Secure secret storage, Dynamic secrets, Leasing and renewal, Data encryption, Multiple authentication methods.
+
+Vault Architecture:
+Picture - using a trusted service account to communicate to the k8s pods
+
+Key Vault cannot access its secrets itself, since the secrets are encrypted and key vault by default does not have an encryption key
+Seal and unseal, vault by default is sealed, downsides is, if you running it as a single instace, you have to unseal it manually if the instance goes down. So if you running it on kubernetes and the scheduler decides to restart the pod or for some reason the node dies, you need to unseal the vault again which can cause your application to have downtime.
+
+When staring up Vault its going to give you 5 keys, to be distributed and not stored together. This can be done manually or in an automated fashion, for the purpose of demo, we will do it manually by taking the 5 keys and giving them to 5 different people. Vault needs at least 3 of the 5 keys, to unseal the Vault.
+
+Vault will then craft the encryption key in memory and use that key to encrypt and decrypt secrets coming in and out of the vault.
+
+Readiness probe will keep the pod alive and it will probably go into crash loop while its still in an unsealed mode.
+
+Modes to startup:
+- Dev
+- Standalone (for this demo, we will keep it simple and use a PV)
+- HA mode (prod mode)
+
+Repo:
+Created a repo with the converted helm chart into respective components, for better learning.
+
+Demo:
+Stateful set (basic deployment for Vault)
+  Need to create a volume (called tls-secret)
+  If we go down to the containers, we see that we have a volume mount with the same name, ssl certs are mounted to this pod
+  If we go to the environment vars, we have to make sure that the address and API is HTTPS because of compliance and since vault is only expecting ssl.
+  Lastly, we need to configure the readiness and livelyness probe to use the HTTPS scheme
+
+
+  Delete Vault:
+  kubectl delete pvc --all -n vault
+  kubectl delete pod/vault-example-0 statefulset.apps/vault-example service/adap-vault-ui service/vault-example -n vault
+
+  Deploy Vault:
+  kubectl -n vault apply -f server/
+
+  Log into pod:
+  kubectl get pods,deploy,sts,svc -n vault
+  kubectl -n vault exec -it vault-example-0 sh
+  vault operator seal
+  vault operator unseal
+  # enter the keys
+
+  Port forward:
+  kubectl -n vault port-forward vault-example-0 8200
